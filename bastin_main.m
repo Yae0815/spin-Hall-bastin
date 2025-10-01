@@ -1,20 +1,19 @@
 function out = bastin_main(params)
-% bastin_main  —  σ^{s_γ}_{αβ} via Bastin (f_n - f_m) on a 3D k-grid.
-% Required in params:
-%   model (with fields H(k), dHdkx(k), dHdky(k), dHdkz(k), Sx,Sy,Sz, Norb)
-%   Nk, eta, Ef, mu, T, e, hbar, alpha, beta, gamma
-% Optional:
-%   shift (1x3), units ('lattice'|'SI'), use_parfor (logical)
+% σ^{s_γ}_{αβ} via Bastin (f_n - f_m) on a 3D k-grid
 
     % ---------- unpack ----------
     model = params.model;
     Nk    = params.Nk;      eta  = params.eta;   Ef = params.Ef;
     mu    = params.mu;      T    = params.T;     e  = params.e;
     hbar  = params.hbar;
-    alpha = lower(params.alpha);  beta = lower(params.beta);  gamma = lower(params.gamma);
-    shift = getfield(params,'shift',[0 0 0]);
-    unit_mode = getfield(params,'units','lattice');
-    use_parfor = getfield(params,'use_parfor',true);
+
+    alpha = lower(params.alpha);
+    beta  = lower(params.beta);
+    gamma = lower(params.gamma);
+
+    if isfield(params,'shift'),      shift = params.shift;      else, shift = [0 0 0]; end
+    if isfield(params,'units'),  unit_mode = params.units;      else, unit_mode = 'lattice'; end
+    if isfield(params,'use_parfor'), use_parfor = params.use_parfor; else, use_parfor = true; end
 
     assert(model.Norb==4,'This template assumes Norb=4.');
 
@@ -26,9 +25,7 @@ function out = bastin_main(params)
     [kxs, kys, kzs, wk] = utils.kgrid3(Nk, shift);
     Ktot = numel(kxs);
 
-    % ---------- Fermi function (E in eV, T in K) ----------
-    fermi = @(E) bastin.fermi(E - (Ef+mu), T);
-
+    % ---------- Bastin sum over k ----------
     if use_parfor
         parts = zeros(Ktot,1);
         parfor t = 1:Ktot
@@ -46,13 +43,14 @@ function out = bastin_main(params)
         end
     end
 
-    % ---- prefactor & units ----
+    % ---------- prefactor & units ----------
+    % Uniform grid in [-π,π): Δk=2π/Nk ⇒ ∫ d^3k/(2π)^3 ≈ (Δk^3/(2π)^3)Σ = (1/Nk^3)Σ
     BZfac = 1/(Nk^3);
     val = (e/hbar) * BZfac * sigma_sum;
 
     if strcmpi(unit_mode,'SI')
-        a = getfield(model,'a',1);
-        val = bastin.units.to_SI(val, a, e, hbar);
+        if isfield(model,'a'), a = model.a; else, a = 1; end
+        val = bastin.units.to_SI(val, a, e, hbar); % 目前 pass-through，之後可在 units.m 實作
     end
 
     out.sigma = val;
